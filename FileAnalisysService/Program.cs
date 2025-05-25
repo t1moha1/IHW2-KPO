@@ -1,21 +1,20 @@
+using FileAnalisysService.Data;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<Db>();
 builder.Services.AddControllers();
 
-
-
 builder.WebHost.UseUrls(
-    "http://0.0.0.0:6000",
-    "https://0.0.0.0:6001"
+    "http://localhost:5004",   
+    "https://localhost:5005"   
 );
 
 builder.Services.AddHttpClient("FileService", client =>
 {
     client.BaseAddress = new Uri("http://localhost:5002/api/");
-});
-
-builder.Services.AddHttpClient("AnalisysService", client =>
-{
-    client.BaseAddress = new Uri("http://localhost:5004/api/");
 });
 
 var app = builder.Build();

@@ -1,40 +1,109 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
+using Microsoft.AspNetCore.Http;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System;
 
-namespace MyApp.Controllers
+namespace APIGatewayController
 {
-    public class Data
-    {
-        public string? Value { get; set;}
-    }
-
     [ApiController]
-    [Route("api/[controller]")]
-    public class ItemsController : ControllerBase
+    [Route("api/file")]
+    public class ApiController : ControllerBase
     {
-        private static readonly List<string> _items = new();
+        private readonly HttpClient _fileStoringService;
+        private readonly HttpClient _fileAnalisysService;
 
-        // GET api/items
-        [HttpGet]
-        public ActionResult<IEnumerable<string>> Get()
+        public ApiController(IHttpClientFactory httpClientFactory)
         {
-            if (_items.Count == 0)
-                return Ok(new[] { "No items available yet." });
-
-            return Ok(_items);
+            _fileStoringService = httpClientFactory.CreateClient("FileService");
+            _fileAnalisysService = httpClientFactory.CreateClient("AnalisysService");
         }
 
-        // POST api/items
-        [HttpPost]
-        public ActionResult<string> Post([FromBody] Data data_obj)
+
+        [HttpPost("upload")]
+        public async Task<IActionResult> UploadTxt([FromForm] IFormFile file)
         {
-            string value = data_obj.Value;    
+            if (file == null || file.Length == 0)
+                return BadRequest("No file provided or empty.");
 
-            if (string.IsNullOrWhiteSpace(value))
-                return BadRequest("Please provide a non-empty value.");
+            var extension = Path.GetExtension(file.FileName);
+            if (!extension.Equals(".txt", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("Only .txt files are allowed.");
 
-            _items.Add(value);
-            return Ok($"Item \"{value}\" added. There are now {_items.Count} item(s).");
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                await using var stream = file.OpenReadStream();
+                var streamContent = new StreamContent(stream);
+                content.Add(streamContent, "file", file.FileName);
+
+                var response = await _fileStoringService.PostAsync("file", content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    return StatusCode((int)response.StatusCode, error);
+                }
+
+                var resultJson = await response.Content.ReadAsStringAsync();
+                return Content(resultJson, "application/json");
+            }
+            catch (IOException ioEx)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error reading the uploaded file.");
+            }
+            catch (HttpRequestException httpEx)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway,
+                    "Error communicating with file storage service.");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "An unexpected error occurred.");
+            }
+        }
+
+        // GET /api/{id}
+        [HttpGet("upload/{id:guid}")]
+        public async Task<IActionResult> GetFile(Guid id)
+        {
+            var response = await _fileStoringService.GetAsync($"file/{id}");
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return NotFound();
+
+            var stream = await response.Content.ReadAsStreamAsync();
+            var fileName = response.Content.Headers.ContentDisposition?.FileName ?? "file.txt";
+
+            return File(stream, "text/plain", fileName);
+        }
+        
+        [HttpGet("analysis/{id:guid}")]
+        public async Task<IActionResult> GetFileAnalysis(Guid id)
+        {
+            try
+            {
+                var response = await _fileAnalisysService.GetAsync($"fileinfo/{id}");
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    return NotFound();
+
+                response.EnsureSuccessStatusCode();
+                var resultJson = await response.Content.ReadAsStringAsync();
+
+                return Content(resultJson, "application/json");
+            }
+            catch (HttpRequestException)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway,
+                    "Error communicating with file analysis service.");
+            }
+            catch
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "An unexpected error occurred while fetching analysis.");
+            }
         }
     }
 }
