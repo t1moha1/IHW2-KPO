@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
+
 SERVICES=(
   "FileStoringService"
   "FileAnalisysService"
   "APIGateway"
 )
+
 
 PID_DIR=".pids"
 mkdir -p "$PID_DIR"
@@ -12,8 +14,9 @@ mkdir -p "$PID_DIR"
 function start_all() {
   echo "Запуск всех сервисов..."
   for svc in "${SERVICES[@]}"; do
+    #echo -n " • $svc… "
     pushd "$svc" > /dev/null
- 
+    
     dotnet run \
       > "../logs/${svc}.log" 2>&1 &
     pid=$!
@@ -32,15 +35,15 @@ function stop_all() {
     if [ -f "$pid_file" ]; then
       pid=$(< "$pid_file")
       if kill -0 "$pid" 2>/dev/null; then
-        echo -n " $svc (PID=$pid)… "
+        echo -n " • $svc (PID=$pid)… "
         kill "$pid"
         echo "OK"
       else
-        echo "$svc: процесс $pid не найден."
+        echo " • $svc: процесс $pid не найден."
       fi
       rm -f "$pid_file"
     else
-      echo "$svc: PID-файл не найден."
+      echo " • $svc: PID-файл не найден."
     fi
   done
   echo "Все сервисы остановлены."
@@ -48,7 +51,6 @@ function stop_all() {
 
 case "$1" in
   start)
-    # создаём папку для логов, если нужно
     mkdir -p logs
     start_all
     ;;

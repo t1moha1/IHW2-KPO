@@ -28,7 +28,6 @@ var conn = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<FileStoreContext>(opts =>
     opts.UseNpgsql(conn));
 
-builder.Services.AddSingleton<Bd>();
 builder.Services.AddControllers();
 
 var app = builder.Build();

@@ -85,7 +85,12 @@ chmod +x manage.sh
 ## 6. Тесты
 
 ```bash
-pytest
+python3 --version
+pip3 --version
+
+pip3 install pytest requests
+
+pytest tests/
 ```
 ---
 

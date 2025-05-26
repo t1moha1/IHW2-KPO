@@ -5,7 +5,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSingleton<Db>();
 builder.Services.AddControllers();
 
 var conn = builder.Configuration.GetConnectionString("DefaultConnection");
