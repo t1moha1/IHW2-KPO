@@ -15,12 +15,12 @@ namespace FileAnalisysService.Controllers
     [Route("api/fileinfo")]
     public class AnalisysController : ControllerBase
     {
-        private readonly Db _db;
+        private readonly AnalysisContext _context;
         private readonly HttpClient _fileStoringService;
 
-        public AnalisysController(Db db, IHttpClientFactory httpFactory)
+        public AnalisysController(AnalysisContext context, IHttpClientFactory httpFactory)
         {
-            _db = db;
+            _context = context;
             _fileStoringService = httpFactory.CreateClient("FileService");
         }
 
@@ -29,8 +29,12 @@ namespace FileAnalisysService.Controllers
         {
             try
             {
-                if (_db.TryGetInfo(id, out var existing))
+                var existing = await _context.Analyses.FindAsync(id);
+
+                if (existing != null)
+                {
                     return Ok(existing);
+                }
 
                 var response = await _fileStoringService.GetAsync($"file/{id}");
 
@@ -48,12 +52,21 @@ namespace FileAnalisysService.Controllers
                 var wordCount = CountWords(content);
                 var charCount = content.Length;
                 var hash = ComputeHash(content);
-                var isPlagiarized = _db.HasHash(hash);
+                var isPlagiarized = _context.Analyses.Any(a => a.Hash == hash);
 
-                var info = new FileAnalysisInfo(paragraphCount, wordCount, charCount, isPlagiarized, hash);
-                _db.AddFile(id, info);
+                var record = new FileAnalysisRecord {
+                    Id = id,
+                    ParagraphCount = paragraphCount,
+                    WordCount = wordCount,
+                    CharacterCount = charCount,
+                    Hash = hash,
+                    IsPlagiarized = isPlagiarized,
+                    AnalyzedAt = DateTime.UtcNow
+                };
+                _context.Analyses.Add(record);
+                await _context.SaveChangesAsync();
 
-                return Ok(info);
+                return Ok(record);
             }
             catch (HttpRequestException)
             {

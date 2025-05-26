@@ -13,11 +13,11 @@ namespace FileStoringService.Controllers
     public class FileController : ControllerBase
     {
         private readonly string _storagePath;
-        private readonly Bd _db;
+        private readonly FileStoreContext _context;
 
-        public FileController(IWebHostEnvironment env, Bd db)
+        public FileController(IWebHostEnvironment env, FileStoreContext context)
         {
-            _db = db;
+            _context = context;
 
             _storagePath = Path.Combine(env.ContentRootPath, "UploadedFiles");
             if (!Directory.Exists(_storagePath))
@@ -48,7 +48,13 @@ namespace FileStoringService.Controllers
                 await using var stream = new FileStream(filePath, FileMode.Create);
                 await file.CopyToAsync(stream);
 
-                _db.AddFile(id, filePath);
+                _context.Files.Add(new FileRecord {
+                    Id = id,
+                    Path = filePath,
+                    UploadedAt = DateTime.UtcNow
+                });
+                await _context.SaveChangesAsync();
+                
 
                 return Ok(new { id });
             }
@@ -68,19 +74,22 @@ namespace FileStoringService.Controllers
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> GetFile(Guid id)
         {
-            if (!_db.TryGetPath(id, out var path))
+            var record = await _context.Files.FindAsync(id);
+            if (record == null)
+            {
                 return NotFound();
+            }
 
-            if (!System.IO.File.Exists(path))
-                return NotFound();
+            if (!System.IO.File.Exists(record.Path))
+                    return NotFound();
 
             try
             {
-                await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                await using var fs = new FileStream(record.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 var memory = new MemoryStream();
                 await fs.CopyToAsync(memory);
                 memory.Position = 0;
-                return File(memory, "text/plain", Path.GetFileName(path));
+                return File(memory, "text/plain", Path.GetFileName(record.Path));
             }
             catch (IOException)
             {
