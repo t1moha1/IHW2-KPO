@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using FileAnalisysService.Data;
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.IO;
@@ -25,37 +27,49 @@ namespace FileAnalisysService.Controllers
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> GetFileInfo(Guid id)
         {
-            if (_db.TryGetInfo(id, out var existing))
-                return Ok(existing);
+            try
+            {
+                if (_db.TryGetInfo(id, out var existing))
+                    return Ok(existing);
 
-            var response = await _fileStoringService.GetAsync($"file/{id}");
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                return NotFound();
-            response.EnsureSuccessStatusCode();
+                var response = await _fileStoringService.GetAsync($"file/{id}");
 
-            var content = await response.Content.ReadAsStringAsync();
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                    return NotFound();
 
-            var paragraphCount = CountParagraphs(content);
-            var wordCount      = CountWords(content);
-            var charCount      = content.Length;
-            var hash           = ComputeHash(content);
-            var isPlagiarized = _db.HasHash(hash);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var err = await response.Content.ReadAsStringAsync();
+                    return StatusCode((int)response.StatusCode, err);
+                }
 
-            var info = new FileAnalysisInfo(paragraphCount, wordCount, charCount, isPlagiarized, hash);
-            _db.AddFile(id, info);
+                var content = await response.Content.ReadAsStringAsync();
+                var paragraphCount = CountParagraphs(content);
+                var wordCount = CountWords(content);
+                var charCount = content.Length;
+                var hash = ComputeHash(content);
+                var isPlagiarized = _db.HasHash(hash);
 
-            return Ok(info);
+                var info = new FileAnalysisInfo(paragraphCount, wordCount, charCount, isPlagiarized, hash);
+                _db.AddFile(id, info);
+
+                return Ok(info);
+            }
+            catch (HttpRequestException)
+            {
+                return StatusCode(StatusCodes.Status502BadGateway, "Ошибка связи сервисом хранения файлов.");
+            }
+            catch
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, "Внутренняя ошибка сервиса анализа файлов.");
+            }
         }
 
         private int CountParagraphs(string text) =>
-            text
-            .Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.RemoveEmptyEntries)
-            .Length;
+            text.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.RemoveEmptyEntries).Length;
 
         private int CountWords(string text) =>
-            text
-            .Split(new[] { ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries)
-            .Length;
+            text.Split(new[] { ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
 
         private string ComputeHash(string text)
         {
