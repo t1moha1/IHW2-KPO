@@ -28,6 +28,7 @@ namespace FileStoringService.Controllers
 
         // POST api/file
         [HttpPost]
+        [Consumes("multipart/form-data")]
         public async Task<ActionResult<object>> UploadTxt([FromForm] IFormFile file)
         {
             if (file == null)
@@ -48,13 +49,14 @@ namespace FileStoringService.Controllers
                 await using var stream = new FileStream(filePath, FileMode.Create);
                 await file.CopyToAsync(stream);
 
-                _context.Files.Add(new FileRecord {
+                _context.Files.Add(new FileRecord
+                {
                     Id = id,
                     Path = filePath,
                     UploadedAt = DateTime.UtcNow
                 });
                 await _context.SaveChangesAsync();
-                
+
 
                 return Ok(new { id });
             }
