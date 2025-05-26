@@ -1,5 +1,0 @@
-Para1	word 
-
-Para2  with   multiple spaces
-
-Final
